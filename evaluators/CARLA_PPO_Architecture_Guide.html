@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CARLA PointNet-PPO Architecture</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background-color: #fcfcfc;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #2980b9;
+            margin-top: 2rem;
+        }
+        p {
+            margin-bottom: 1rem;
+            font-size: 1.05rem;
+        }
+        .highlight {
+            background-color: #ecf0f1;
+            border-left: 4px solid #3498db;
+            padding: 10px 15px;
+            margin: 1.5rem 0;
+            font-style: italic;
+        }
+        .flow-diagram {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 2rem 0;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .step {
+            display: inline-block;
+            background: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            margin: 10px;
+            font-weight: bold;
+        }
+        .arrow {
+            display: inline-block;
+            font-size: 1.5rem;
+            color: #7f8c8d;
+            vertical-align: middle;
+        }
+        ul {
+            background: white;
+            padding: 20px 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        li {
+            margin-bottom: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background-color: #f7f9fa;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>CARLA LiDAR & PPO Integration Guide</h1>
+    <p>This document explains the mathematical and programmatic flow of how 3D point cloud data is processed by the new Reinforcement Learning Pipeline.</p>
+
+    <div class="highlight">
+        "By integrating LiDAR, your PPO agent no longer guesses depth from 2D images. It explicitly feels the geometry of the surrounding environment."
+    </div>
+
+    <h2>1. The Architecture Pipeline</h2>
+    <div class="flow-diagram">
+        <div class="step">Carla Env<br><small>(1024 Points)</small></div>
+        <div class="arrow">➔</div>
+        <div class="step">Flattened Tensor<br><small>(3072 Float Array)</small></div>
+        <div class="arrow">➔</div>
+        <div class="step">PointNet<br><small>(Feature Extractor)</small></div>
+        <div class="arrow">➔</div>
+        <div class="step">Concatenation<br><small>(Image + Speed + LiDAR)</small></div>
+        <div class="arrow">➔</div>
+        <div class="step">PPO Decision<br><small>(Steer / Gas / Brake)</small></div>
+    </div>
+
+    <h2>2. How the Data Transforms</h2>
+    <p>Neural networks require fixed-size, structured inputs. However, LiDAR data comes as an unstructured "Point Cloud" &mdash; an array of 1024 distinct points in 3D space [X, Y, Z]. Passing this directly to a traditional multi-layer perceptron (MLP) is highly inefficient and loses spatial meaning.</p>
+    
+    <p>Therefore, we pass it through a custom <strong>PointNet</strong> module inside the agent:</p>
+    <ul>
+        <li><strong>Step A:</strong> The agent reshapes the incoming flat array back into precisely 1024 points.</li>
+        <li><strong>Step B:</strong> A specialized Mini-Neural Network acts on <em>every individual point in isolation</em>, projecting its [X,Y,Z] coordinates into a 64-dimensional feature representation.</li>
+        <li><strong>Step C:</strong> We apply a mathematically symmetric <strong>Max-Pooling</strong> operation across all 1024 point features. This crushes the entirety of the point cloud down into exactly <strong>64 global features</strong>.</li>
+    </ul>
+
+    <h2>3. Final Tensor Sizes</h2>
+    <p>Before making a decision, the PPO agent fuses these three distinct senses into one single perception vector:</p>
+    <table>
+        <thead>
+            <tr>
+                <th>Source</th>
+                <th>Description</th>
+                <th>Vector Size</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Camera</strong></td>
+                <td>Processed through pre-trained VAE encoder (beta-VAE).</td>
+                <td>128</td>
+            </tr>
+            <tr>
+                <td><strong>Telemetry</strong></td>
+                <td>Vehicle dynamics (Speed and Steering angle).</td>
+                <td>2</td>
+            </tr>
+            <tr>
+                <td><strong>LiDAR</strong></td>
+                <td>Processed via our new PointNet feature extractor.</td>
+                <td>64</td>
+            </tr>
+            <tr>
+                <td><strong>Total</strong></td>
+                <td><strong>Final fused observation dimension sent to Actor/Critic MLPs.</strong></td>
+                <td><strong>194</strong></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>4. Training Implications</h2>
+    <p>Because the PointNet Extractor is built directly into the start of the <code>Actor</code> and <code>Critic</code> modules respectively, it calculates gradients automatically during the PPO rollout updates. Over thousands of episodes, the backpropagation will dynamically teach the PointNet exactly which spatial features indicate an impending collision (a negative reward) and adjust its weights.</p>
+    <p><em>Note: You can safely delete the old <code>ppo_checkpoint.pth</code> since the input size has permanently shifted from 130 to 194.</em></p>
+
+</body>
+</html>
