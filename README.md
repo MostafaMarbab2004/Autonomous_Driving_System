@@ -11,6 +11,14 @@ This repository contains the reinforcement learning (RL) pipeline for training a
    ```
    The script will automatically connect to CARLA, spawn the vehicle, and begin the training/driving loop.
 
+
+
+
+https://github.com/user-attachments/assets/7a07804e-4026-4dd6-80f3-3d6d1c58b055
+
+
+   
+
 ## Key Files & Structure
 
 *   **`main_runner.py`**: The central orchestrator. It connects to CARLA, handles the driving loop, runs the visualization, and triggers PPO updates.
